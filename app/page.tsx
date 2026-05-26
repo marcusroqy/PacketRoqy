@@ -4,6 +4,7 @@ import { ReactFlowProvider } from '@xyflow/react'
 import { Cable, HelpCircle } from 'lucide-react'
 import { TopologyLogo, DEVICE_ICON } from '@/components/icons/DeviceIcons'
 import { useNetworkStore, engine } from '@/lib/store/network'
+import { ProjectSelector } from '@/components/header/ProjectSelector'
 import { NetworkCanvas } from '@/components/canvas/NetworkCanvas'
 import { DevicePanel } from '@/components/panels/DevicePanel'
 import { PacketLog } from '@/components/panels/PacketLog'
@@ -86,6 +87,7 @@ export default function Home() {
 
           {/* Right controls */}
           <div className="ml-auto flex items-center gap-2">
+            <ProjectSelector />
             <span className="noc-hint hidden xl:block text-[9px] tracking-wider mr-1">
               CABO → selecione dispositivos · DELETE remove
             </span>

@@ -1,10 +1,12 @@
 'use client'
 import { createPortal } from 'react-dom'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { Monitor } from 'lucide-react'
 import { useTermWins } from '@/lib/store/termWindows'
 import type { TermWinDef } from '@/lib/store/termWindows'
 import { TabbedTerminal } from './TabbedTerminal'
+
+const noopSubscribe = () => () => {}
 
 function openDetached(deviceId: string, label: string, deviceType: string, brand?: string) {
   const url = `/detached?d=${encodeURIComponent(deviceId)}&l=${encodeURIComponent(label)}&t=${encodeURIComponent(deviceType)}&b=${encodeURIComponent(brand ?? '')}`
@@ -231,9 +233,8 @@ function FloatingWindow({
 
 export function FloatingTerminalManager() {
   const { windows } = useTermWins()
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => { setMounted(true) }, [])
+  // false during SSR and hydration, true once on the client (portals need document.body)
+  const mounted = useSyncExternalStore(noopSubscribe, () => true, () => false)
   if (!mounted || windows.length === 0) return null
 
   return createPortal(

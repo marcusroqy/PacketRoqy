@@ -126,25 +126,22 @@ function TrafficEdgeInner({
   const nodes     = useNetworkStore(s => s.nodes)
   const edges     = useNetworkStore(s => s.edges)
 
-  const [fwdActive, setFwdActive] = useState(false)
-  const [revActive, setRevActive] = useState(false)
-  const fwdTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const revTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  // A direction is active from a new activity timestamp until FADE_MS later
+  const [fwdFadedTs, setFwdFadedTs] = useState(0)
+  const [revFadedTs, setRevFadedTs] = useState(0)
+  const fwdActive = fwdTs !== 0 && fwdTs !== fwdFadedTs
+  const revActive = revTs !== 0 && revTs !== revFadedTs
 
   useEffect(() => {
     if (fwdTs === 0) return
-    setFwdActive(true)
-    clearTimeout(fwdTimer.current)
-    fwdTimer.current = setTimeout(() => setFwdActive(false), FADE_MS)
-    return () => clearTimeout(fwdTimer.current)
+    const t = setTimeout(() => setFwdFadedTs(fwdTs), FADE_MS)
+    return () => clearTimeout(t)
   }, [fwdTs])
 
   useEffect(() => {
     if (revTs === 0) return
-    setRevActive(true)
-    clearTimeout(revTimer.current)
-    revTimer.current = setTimeout(() => setRevActive(false), FADE_MS)
-    return () => clearTimeout(revTimer.current)
+    const t = setTimeout(() => setRevFadedTs(revTs), FADE_MS)
+    return () => clearTimeout(t)
   }, [revTs])
 
   const isLive: boolean = (() => {

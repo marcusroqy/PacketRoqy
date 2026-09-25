@@ -1,10 +1,13 @@
 'use client'
-import { Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Terminal as XTerm } from '@xterm/xterm'
+import { Terminal as XTerm, type ITerminalOptions } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
+import type { TerminalDevice } from '@/lib/simulation/terminal-device'
 import { Eraser } from 'lucide-react'
+
+const noopSubscribe = () => () => {}
 
 /* ── helpers (mirrors Terminal.tsx, but uses injected engine) ── */
 
@@ -149,22 +152,26 @@ function DetachedTerminalInner() {
   const [cliMode,      setCliMode]      = useState('user')
   const [devIp,        setDevIp]        = useState<string | undefined>(undefined)
   const [diagMode,     setDiagMode]     = useState<{ cmd: 'ping' | 'traceroute'; ip: string } | null>(null)
-  const [bridgeError,  setBridgeError]  = useState(false)
+  const bridgeError = useSyncExternalStore(
+    noopSubscribe,
+    () => !(window.opener as Window | null)?.__pqBridge?.engine,
+    () => false,
+  )
   const diagInputRef = useRef<HTMLInputElement>(null)
 
   /* xterm setup */
   useEffect(() => {
     if (!termRef.current) return
 
-    const bridge = (window.opener as any)?.__pqBridge
-    if (!bridge?.engine) { setBridgeError(true); return }
+    const bridge = (window.opener as Window | null)?.__pqBridge
+    if (!bridge?.engine) return
 
     const eng = bridge.engine
 
     const getDeviceMode = (): string => {
-      const dev = eng.getDevice(deviceId) as any
+      const dev = eng.getDevice<TerminalDevice>(deviceId)
       if (!dev) return 'user'
-      const cli = dev.cli as any
+      const cli = dev.cli
       if (!cli) {
         if (dev.subtype === 'server') return 'linux'
         if (dev.brand === 'Apple') return 'macos'
@@ -174,7 +181,7 @@ function DetachedTerminalInner() {
     }
 
     const getDeviceIp = (): string | undefined => {
-      const dev = eng.getDevice(deviceId) as any
+      const dev = eng.getDevice<TerminalDevice>(deviceId)
       if (!dev) return undefined
       if (dev.type === 'router') {
         for (const iface of (dev.interfaces?.values() ?? [])) if (iface.ip) return iface.ip
@@ -182,6 +189,8 @@ function DetachedTerminalInner() {
       }
       return dev.iface?.ip
     }
+
+    const syncStatus = () => { setCliMode(getDeviceMode()); setDevIp(getDeviceIp()) }
 
     const term = new XTerm({
       theme: {
@@ -200,21 +209,21 @@ function DetachedTerminalInner() {
       fontFamily: '"JetBrains Mono","Fira Code","Cascadia Code","Consolas",Menlo,monospace',
       fontSize: 13.5, lineHeight: 1.55, cursorBlink: true, cursorStyle: 'block',
       scrollback: 5000, padding: 10, allowProposedApi: true,
-    } as any)
+    } as ITerminalOptions)
 
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(termRef.current)
     fit.fit()
 
-    const dev = eng.getDevice(deviceId) as any
+    const dev = eng.getDevice<TerminalDevice>(deviceId)
     if (dev) {
       const banner: string[] | undefined = dev.getBanner?.()
       if (banner) { for (const l of banner) term.writeln(l) }
       else { term.writeln(`\x1b[32mPacketRoqy — ${dev.name}\x1b[0m`); term.writeln('') }
     }
 
-    const getPrompt = () => (eng.getDevice(deviceId) as any)?.getPrompt?.() ?? '\x1b[32m> \x1b[0m'
+    const getPrompt = () => (eng.getDevice<TerminalDevice>(deviceId))?.getPrompt?.() ?? '\x1b[32m> \x1b[0m'
     term.write(getPrompt())
 
     let line = '', cursor = 0, ghostText = '', prevTargetRow = 0, currentExecId = 0
@@ -226,7 +235,7 @@ function DetachedTerminalInner() {
       const promptStr    = getPrompt()
       const promptVisLen = stripAnsi(promptStr).length
       const cols         = term.cols || 80
-      const device       = eng.getDevice(deviceId) as any
+      const device       = eng.getDevice<TerminalDevice>(deviceId)
       const b            = device?.brand ?? 'Cisco'
 
       ghostText = ''
@@ -271,7 +280,7 @@ function DetachedTerminalInner() {
     function histDown() { if (histIdx > 0) { histIdx--; line = hist[hist.length-1-histIdx]; cursor = line.length; redraw() } else if (histIdx === 0) { histIdx = -1; line = histSaved; cursor = line.length; redraw() } }
 
     function doTab() {
-      const device = eng.getDevice(deviceId) as any
+      const device = eng.getDevice<TerminalDevice>(deviceId)
       const all: string[] = device?.getCompletions?.(line) ?? []
       if (!all.length) { term.write('\x07'); return }
       if (all.length === 1) { line = all[0].endsWith(' ') ? all[0] : all[0]+' '; cursor = line.length; redraw(); return }
@@ -294,7 +303,7 @@ function DetachedTerminalInner() {
 
     const handleCommand = async (cmd: string) => {
       const execId = currentExecId
-      const device = eng.getDevice(deviceId)
+      const device = eng.getDevice<TerminalDevice>(deviceId)
       if (!device) return
 
       const result  = device.executeCommand(cmd)
@@ -304,27 +313,26 @@ function DetachedTerminalInner() {
       for (let i = 0; i < sync.length; i++) writeLine(term, sync[i], i === sync.length-1 && async_.length === 0)
       resetDrawnRows()
       bridge.refreshSnapshot?.(deviceId)
-      setCliMode(getDeviceMode())
-      setDevIp(getDeviceIp())
+      syncStatus()
 
       for (const s of async_) {
         if (execId !== currentExecId) return
         if (s.startsWith('__ASYNC_PING__')) {
           const target = s.slice(14)
           term.writeln(`\x1b[33mPinging ${target}...\x1b[0m`)
-          const lines: string[] = await (device as any).ping(target)
+          const lines: string[] = await device.ping?.(target) ?? []
           if (execId !== currentExecId) return
           for (const l of lines) term.writeln(colorizeOutput(l))
           resetDrawnRows(); term.write(getPrompt())
-          setCliMode(getDeviceMode()); setDevIp(getDeviceIp())
+          syncStatus()
         } else if (s.startsWith('__ASYNC_TRACE__')) {
           const target = s.slice(15)
           term.writeln(`\x1b[33mTracing route to ${target}...\x1b[0m`)
-          const lines: string[] = await (device as any).traceroute(target)
+          const lines: string[] = await device.traceroute?.(target) ?? []
           if (execId !== currentExecId) return
           for (const l of lines) term.writeln(colorizeOutput(l))
           resetDrawnRows(); term.write(getPrompt())
-          setCliMode(getDeviceMode()); setDevIp(getDeviceIp())
+          syncStatus()
         }
       }
     }
@@ -422,7 +430,7 @@ function DetachedTerminalInner() {
     const obs = new ResizeObserver(() => fit.fit())
     obs.observe(termRef.current!)
 
-    setCliMode(getDeviceMode()); setDevIp(getDeviceIp())
+    syncStatus()
 
     return () => {
       obs.disconnect()
@@ -440,11 +448,11 @@ function DetachedTerminalInner() {
 
   const knownIps: string[] = (() => {
     try {
-      const bridge = (window.opener as any)?.__pqBridge
-      const dev = bridge?.engine?.getDevice(deviceId) as any
+      const bridge = (window.opener as Window | null)?.__pqBridge
+      const dev = bridge?.engine?.getDevice<TerminalDevice>(deviceId)
       if (!dev) return []
-      if (deviceType === 'router') return Array.from(dev.arpTable.values() as any[]).map((v: any) => v.ip).filter(Boolean)
-      return Array.from(dev.arpTable.keys() as Iterable<string>)
+      if (deviceType === 'router') return Array.from(dev.arpTable?.values() ?? []).map(v => ('ip' in v ? v.ip : '')).filter(Boolean)
+      return Array.from(dev.arpTable?.keys() ?? [])
     } catch { return [] }
   })()
 
@@ -481,7 +489,7 @@ function DetachedTerminalInner() {
       <div className="dtach-header">
         <div className="dtach-tl">
           <span className="fterm-dot fterm-dot-close" onClick={() => window.close()} title="Close" />
-          <span className="fterm-dot fterm-dot-min"   onClick={() => (window as any).blur()} title="Minimize" />
+          <span className="fterm-dot fterm-dot-min"   onClick={() => window.blur()} title="Minimize" />
           <span className="fterm-dot fterm-dot-max"   title="" />
         </div>
         <div className="dtach-device-name">{deviceLabel}</div>

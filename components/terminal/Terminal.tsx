@@ -1,11 +1,12 @@
 'use client'
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Terminal as XTerm } from '@xterm/xterm'
+import { Terminal as XTerm, type ITerminalOptions } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { engine, useNetworkStore } from '@/lib/store/network'
 import { RouterDevice } from '@/lib/simulation/devices/router'
 import { PCDevice } from '@/lib/simulation/devices/pc'
+import type { TerminalDevice } from '@/lib/simulation/terminal-device'
 
 export interface TerminalActions {
   inject: (cmd: string) => void
@@ -102,14 +103,14 @@ function longestCommonPrefix(strs: string[]): string {
 }
 
 function devPrompt(deviceId: string): string {
-  return (engine.getDevice(deviceId) as any)?.getPrompt?.() ?? '\x1b[32m> \x1b[0m'
+  return (engine.getDevice<TerminalDevice>(deviceId))?.getPrompt?.() ?? '\x1b[32m> \x1b[0m'
 }
 
 /** Detect what CLI mode a device is currently in (for status bar) */
 function getDeviceMode(deviceId: string): string {
-  const dev = engine.getDevice(deviceId) as any
+  const dev = engine.getDevice<TerminalDevice>(deviceId)
   if (!dev) return 'user'
-  const cli = dev.cli as any
+  const cli = dev.cli
   if (!cli) {
     // PC device — detect by brand/subtype
     if (dev.subtype === 'server') return 'linux'
@@ -120,7 +121,7 @@ function getDeviceMode(deviceId: string): string {
 }
 
 function getDeviceIp(deviceId: string): string | undefined {
-  const dev = engine.getDevice(deviceId) as any
+  const dev = engine.getDevice<TerminalDevice>(deviceId)
   if (!dev) return undefined
   // Router: first interface with IP
   if (dev.type === 'router') {
@@ -167,7 +168,7 @@ export function DeviceTerminal({ deviceId, actionsRef, onModeChange, onIpChange 
       scrollback: 5000,
       padding: 10,
       allowProposedApi: true,
-    } as any)
+    } as ITerminalOptions)
 
     const fit = new FitAddon()
     term.loadAddon(fit)
@@ -176,7 +177,7 @@ export function DeviceTerminal({ deviceId, actionsRef, onModeChange, onIpChange 
     xtermRef.current = term
     fitRef.current   = fit
 
-    const dev = engine.getDevice(deviceId) as any
+    const dev = engine.getDevice<TerminalDevice>(deviceId)
     if (dev) {
       const banner: string[] | undefined = dev.getBanner?.()
       if (banner) {
@@ -204,7 +205,7 @@ export function DeviceTerminal({ deviceId, actionsRef, onModeChange, onIpChange 
       const promptStr = getPrompt()
       const promptVisLen = stripAnsi(promptStr).length
       const cols = term.cols || 80
-      const device = engine.getDevice(deviceId) as any
+      const device = engine.getDevice<TerminalDevice>(deviceId)
       const brand = device?.brand ?? 'Cisco'
       
       ghostText = ''
@@ -306,7 +307,7 @@ export function DeviceTerminal({ deviceId, actionsRef, onModeChange, onIpChange 
     }
 
     function doTab() {
-      const device = engine.getDevice(deviceId) as any
+      const device = engine.getDevice<TerminalDevice>(deviceId)
       const all: string[] = device?.getCompletions?.(line) ?? []
       if (!all.length) { term.write('\x07'); return }
 

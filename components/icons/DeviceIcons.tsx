@@ -6071,7 +6071,7 @@ export function PCPreview({ brand, model, ...props }: PreviewP) {
         <circle cx="56" cy="31" r="2.5" fill="#4ade80" opacity="0.9" />
         <text x={is16 ? 113 : 108} y="33" textAnchor="middle" fill="#93c5fd" fontSize="5" fontFamily="monospace">roqy@macbook-pro: ~</text>
         <text x="42" y="44" fill="#4ade80" fontSize="5" fontFamily="monospace">$ xcodebuild -list</text>
-        <text x="42" y="52" fill="#60a5fa" fontSize="5" fontFamily="monospace">Information about project "PacketRoqy":</text>
+        <text x="42" y="52" fill="#60a5fa" fontSize="5" fontFamily="monospace">Information about project &quot;PacketRoqy&quot;:</text>
         <text x="42" y="60" fill="#94a3b8" fontSize="5" fontFamily="monospace">    Schemes:</text>
         <text x="42" y="68" fill="#a3e635" fontSize="5" fontFamily="monospace">        PacketRoqy</text>
         <text x="42" y="76" fill="#4ade80" fontSize="5" fontFamily="monospace">$ swift build --configuration release</text>

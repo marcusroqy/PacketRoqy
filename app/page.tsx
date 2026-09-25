@@ -38,7 +38,7 @@ export default function Home() {
   const [pickerType, setPickerType] = useState<DeviceType | null>(null)
 
   useEffect(() => {
-    ;(window as any).__pqBridge = {
+    window.__pqBridge = {
       engine,
       refreshSnapshot: (id: string) => useNetworkStore.getState().refreshSnapshot(id),
     }

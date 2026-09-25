@@ -4,10 +4,11 @@ import { Eraser } from 'lucide-react'
 import { DeviceTerminal, type TerminalActions } from './Terminal'
 import { RouterDevice } from '@/lib/simulation/devices/router'
 import { PCDevice } from '@/lib/simulation/devices/pc'
+import type { TerminalDevice } from '@/lib/simulation/terminal-device'
 import { engine } from '@/lib/store/network'
 
 type DiagMode = { cmd: 'ping' | 'traceroute'; ip: string } | null
-interface TermTab { id: string; label: string }
+interface TermTab { id: string; label: string; actions: { current: TerminalActions | null } }
 
 const CMD_GROUPS: Record<string, Array<{ label: string; cmd: string; kind: 'show' | 'config' | 'diag' | 'danger' }>> = {
   router: [
@@ -77,24 +78,22 @@ export function TabbedTerminal({
 }: {
   deviceId: string; deviceLabel: string; brand: string | undefined; deviceType: string
 }) {
-  const fid = useRef(`tt${++_tabSeq}`).current
-  const [tabs, setTabs]         = useState<TermTab[]>([{ id: fid, label: '1' }])
+  const [fid] = useState(() => `tt${++_tabSeq}`)
+  const [tabs, setTabs]         = useState<TermTab[]>(() => [{ id: fid, label: '1', actions: { current: null } }])
   const [activeId, setActiveId] = useState(fid)
   const [tabModes, setTabModes] = useState<Record<string, string>>({ [fid]: 'user' })
   const [tabIps, setTabIps]     = useState<Record<string, string | undefined>>({ [fid]: undefined })
   const [diagMode, setDiagMode] = useState<DiagMode>(null)
   const diagInputRef = useRef<HTMLInputElement>(null)
-  const actionsMap   = useRef<Record<string, { current: TerminalActions | null }>>({ [fid]: { current: null } })
 
   const cliMode = tabModes[activeId] ?? 'user'
   const devIp   = tabIps[activeId]
-  const inject  = (cmd: string) => actionsMap.current[activeId]?.current?.inject(cmd)
+  const activeActions = () => tabs.find(t => t.id === activeId)?.actions.current
+  const inject  = (cmd: string) => activeActions()?.inject(cmd)
 
   const addTab = () => {
     const id = `tt${++_tabSeq}`
-    actionsMap.current[id] = { current: null }
-    const n = Object.keys(actionsMap.current).length
-    setTabs(prev => [...prev, { id, label: String(n) }])
+    setTabs(prev => [...prev, { id, label: String(prev.length + 1), actions: { current: null } }])
     setTabModes(prev => ({ ...prev, [id]: 'user' }))
     setTabIps(prev => ({ ...prev, [id]: undefined }))
     setActiveId(id)
@@ -105,7 +104,6 @@ export function TabbedTerminal({
     const idx  = curTabs.findIndex(t => t.id === id)
     const next = curTabs.filter(t => t.id !== id)
     if (id === activeId) setActiveId(next[Math.min(idx, next.length - 1)].id)
-    delete actionsMap.current[id]
     setTabs(next)
     setTabModes(prev => { const n = { ...prev }; delete n[id]; return n })
     setTabIps(prev => { const n = { ...prev }; delete n[id]; return n })
@@ -113,10 +111,10 @@ export function TabbedTerminal({
 
   const knownIps: string[] = (() => {
     try {
-      const dev = engine.getDevice(deviceId) as any
+      const dev = engine.getDevice<TerminalDevice>(deviceId)
       if (!dev) return []
       if (deviceType === 'router')
-        return Array.from((dev as RouterDevice).arpTable.values()).map((v: any) => v.ip).filter(Boolean)
+        return Array.from((dev as RouterDevice).arpTable.values()).map(v => v.ip).filter(Boolean)
       return Array.from((dev as PCDevice).arpTable.keys())
     } catch { return [] }
   })()
@@ -230,7 +228,7 @@ export function TabbedTerminal({
           </div>
         </>)}
         <div className="terminal-toolbar-sep ml-auto" />
-        <button type="button" onClick={() => actionsMap.current[activeId]?.current?.clear()}
+        <button type="button" onClick={() => activeActions()?.clear()}
           title="Clear (Ctrl+L)" className="terminal-cmd-btn ml-1">
           <Eraser className="w-3 h-3" />clear
         </button>
@@ -285,7 +283,7 @@ export function TabbedTerminal({
               <DeviceTerminal
                 key={tab.id}
                 deviceId={deviceId}
-                actionsRef={actionsMap.current[tab.id]}
+                actionsRef={tab.actions}
                 onModeChange={mode => setTabModes(prev => ({ ...prev, [tab.id]: mode }))}
                 onIpChange={ip => setTabIps(prev => ({ ...prev, [tab.id]: ip }))}
               />

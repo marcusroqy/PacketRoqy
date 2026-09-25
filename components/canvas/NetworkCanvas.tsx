@@ -50,14 +50,16 @@ export function NetworkCanvas() {
   const [cablePickerNode, setCablePickerNode] = useState<Node<DeviceNodeData> | null>(null)
 
   // Reset cable flow state when cable mode is toggled off
-  useEffect(() => {
+  const [prevCableMode, setPrevCableMode] = useState(cableMode)
+  if (cableMode !== prevCableMode) {
+    setPrevCableMode(cableMode)
     if (!cableMode) {
       setCableStep(1)
       setCableSourceNode(null)
       setCableSourcePort(null)
       setCablePickerNode(null)
     }
-  }, [cableMode])
+  }
 
   // ESC to cancel cable steps
   useEffect(() => {

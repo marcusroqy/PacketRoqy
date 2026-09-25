@@ -4,7 +4,7 @@ import { createMiddlewareClient } from '@/lib/supabase/server'
 
 const PUBLIC_PATHS = ['/login', '/detached']
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const response = NextResponse.next({ request })
   const supabase = createMiddlewareClient(request, response)
 

@@ -265,14 +265,13 @@ export class RouterDevice extends BaseDevice {
     return new Promise(resolve => {
       const id = pingIdCounter++
       let done = false
-      let timer: ReturnType<typeof setTimeout>
       const state: PingState = {
         id, count: 1, target: targetIp, sent: 1, results: [], resolve: () => {},
         onReply: (_type, srcIp) => { if (done) return; done = true; clearTimeout(timer); this.pingStates.delete(id); resolve(srcIp) },
       }
       this.pingStates.set(id, state)
+      const timer = setTimeout(() => { if (done) return; done = true; this.pingStates.delete(id); resolve(null) }, 200)
       this.sendIPPacket(targetIp, 1, { type: ICMP_ECHO_REQUEST, code: 0, id, sequence: 1 }, undefined, ttl)
-      timer = setTimeout(() => { if (done) return; done = true; this.pingStates.delete(id); resolve(null) }, 200)
     })
   }
 
